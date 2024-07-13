@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+  // SPDX-License-Identifier: MIT
 // solhint-disable custom-errors
 pragma solidity 0.8.23;
 
@@ -7,6 +7,7 @@ pragma solidity 0.8.23;
 import {ConfirmedOwner} from '@chainlink/contracts/src/v0.8/shared/access/ConfirmedOwner.sol';
 import {VRFConsumerBaseV2} from '@chainlink/contracts/src/v0.8/vrf/VRFConsumerBaseV2.sol';
 import {VRFCoordinatorV2Interface} from '@chainlink/contracts/src/v0.8/vrf/interfaces/VRFCoordinatorV2Interface.sol';
+import {IPlataPlomo} from 'src/interfaces/IPlataPlomo.sol';
 
 /**
  * @title Greeter Contract
@@ -14,49 +15,7 @@ import {VRFCoordinatorV2Interface} from '@chainlink/contracts/src/v0.8/vrf/inter
  * @notice This is a basic contract created in order to portray some
  * best practices and foundry functionality.
  */
-contract PlataPlomo is VRFConsumerBaseV2, ConfirmedOwner {
-  enum GameStatus {
-    MakingGame,
-    PendingPlayer,
-    PendingOracle,
-    Completed
-  }
-
-  struct Weapon {
-    uint256 damage;
-    uint256 range;
-  }
-
-  struct Player {
-    uint256 health;
-    Weapon weapon;
-  }
-
-  struct PlayerState {
-    address player;
-    uint256 healthRemaining;
-    Weapon weapon;
-    bool facingRight;
-    uint256 position;
-  }
-
-  struct Game {
-    address winner;
-    uint256 round;
-    bool player1Turn;
-    GameStatus gameStatus;
-    uint256 lastRequestId;
-    PlayerState player1State;
-    PlayerState player2State;
-    uint256 maxBranches;
-  }
-
-  struct RequestStatus {
-    bool fulfilled; // whether the request has been successfully fulfilled
-    bool exists; // whether a requestId exists
-    uint256[] randomWords;
-  }
-
+contract PlataPlomo is VRFConsumerBaseV2, ConfirmedOwner, IPlataPlomo {
   // solhint-disable-next-line
   VRFCoordinatorV2Interface COORDINATOR;
   address public vrfCoordinator = 0x5CE8D5A2BC84beb22a398CCA51996F7930313D61;
@@ -71,14 +30,9 @@ contract PlataPlomo is VRFConsumerBaseV2, ConfirmedOwner {
 
   // solhint-disable-next-line
   mapping(uint256 => uint256 _gameId) public s_requests; /* requestId --> gameId */
-  mapping(uint256 => Player) public playerTypes;
-  mapping(uint256 => Game) public games;
+  mapping(uint256 => Player) private _playerTypes;
+  mapping(uint256 => Game) private _games;
   uint256 public largestGameId;
-
-  event GameCreated(uint256 _gameId, address _player1);
-  event GameStarted(uint256 _gameId, address _player1, address _player2);
-  event RoundStarted(uint256 round, uint256 _gameId, address _player, bool _moveRight, uint256 requestId);
-  event RoundCompleted(uint256 round, uint256 _gameId, address _player, uint256 requestId, uint256 randomWord);
 
   constructor(uint64 _subscriptionId) VRFConsumerBaseV2(vrfCoordinator) ConfirmedOwner(msg.sender) {
     COORDINATOR = VRFCoordinatorV2Interface(vrfCoordinator);
@@ -87,94 +41,153 @@ contract PlataPlomo is VRFConsumerBaseV2, ConfirmedOwner {
 
   function createGame(address _player1, uint256 _playerType) external returns (uint256 _gameId) {
     _gameId = largestGameId++;
-    Player memory _player = playerTypes[_playerType];
+    Player memory _player = _playerTypes[_playerType];
     PlayerState memory _player1State = PlayerState(_player1, _player.health, _player.weapon, true, 0);
     PlayerState memory _player2State = PlayerState(address(0), 0, _player.weapon, false, maxBranches - 1);
 
-    games[_gameId] = Game(address(0), 0, false, GameStatus.MakingGame, 0, _player1State, _player2State, maxBranches);
+    _games[_gameId] = Game(address(0), 0, false, GameStatus.MakingGame, 0, _player1State, _player2State, maxBranches);
     return _gameId;
   }
 
   function joinGame(uint256 _gameId, address _player2, uint256 _playerType) external {
-    if (games[_gameId].player1State.player == _player2) {
+    if (_games[_gameId].player1State.player == _player2) {
       revert('Player is already in the game');
     }
-    if (games[_gameId].player2State.player != address(0)) {
+    if (_games[_gameId].player2State.player != address(0)) {
       revert('Game is already full');
     }
 
-    Player memory _player = playerTypes[_playerType];
+    Player memory _player = _playerTypes[_playerType];
 
-    games[_gameId].player2State.player = _player2;
-    games[_gameId].player2State.weapon = _player.weapon;
-    games[_gameId].player2State.healthRemaining = _player.health;
-    games[_gameId].gameStatus = GameStatus.PendingPlayer;
+    _games[_gameId].player2State.player = _player2;
+    _games[_gameId].player2State.weapon = _player.weapon;
+    _games[_gameId].player2State.healthRemaining = _player.health;
+    _games[_gameId].gameStatus = GameStatus.PendingPlayer;
   }
 
   function startRound(uint256 _gameId, bool _moveRight) external {
-    if (games[_gameId].gameStatus != GameStatus.PendingPlayer) {
+    if (_games[_gameId].gameStatus != GameStatus.PendingPlayer) {
       revert('Next round is not playable');
     }
 
-    if (games[_gameId].player1State.player != msg.sender || games[_gameId].player2State.player != msg.sender) {
+    if (_games[_gameId].player1State.player != msg.sender || _games[_gameId].player2State.player != msg.sender) {
       revert('Player is not in the game');
     }
 
     if (
-      games[_gameId].player1State.player == msg.sender && games[_gameId].player1Turn == false
-        || games[_gameId].player2State.player == msg.sender && games[_gameId].player1Turn == true
+      _games[_gameId].player1State.player == msg.sender && _games[_gameId].player1Turn == false
+        || _games[_gameId].player2State.player == msg.sender && _games[_gameId].player1Turn == true
     ) {
       revert('Not your turn');
     }
 
-    games[_gameId].gameStatus = GameStatus.PendingOracle;
+    _games[_gameId].gameStatus = GameStatus.PendingOracle;
     uint256 _requestId = _vrfRequest();
 
     s_requests[_requestId] = _gameId;
 
-    emit RoundStarted(games[_gameId].round, _gameId, msg.sender, _moveRight, _requestId);
+    emit RoundStarted(_games[_gameId].round, _gameId, msg.sender, _moveRight, _requestId);
+  }
+
+  function playerTypes(uint256 playerType) external view returns (Player memory) {
+    return _playerTypes[playerType];
+  }
+
+  function getOpenGame()
+    external
+    view
+    returns (uint256 _gameId, bool _playerOneExists, bool _playerTwoExists, bool _isPlayerOne)
+  {
+    for (uint256 i = 1; i <= largestGameId; i++) {
+      if (_games[i].gameStatus != GameStatus.Completed) {
+        if (msg.sender == _games[i].player1State.player || msg.sender == _games[i].player2State.player) {
+          if (msg.sender == _games[i].player1State.player) {
+            return (i, true, _games[i].player2State.player != address(0), true);
+          } else {
+            return (i, _games[i].player1State.player != address(0), true, false);
+          }
+        }
+      }
+      if (_games[i].gameStatus == GameStatus.MakingGame) {
+        if (_games[i].player1State.player == msg.sender) {
+          return (i, false, false, true);
+        }
+        return (i, true, false, false);
+      }
+    }
+
+    return (0, false, false, false);
+  }
+
+  function games(uint256 gameId) external view override returns (Game memory) {
+    return _games[gameId];
   }
 
   // solhint-disable-next-line
   function fulfillRandomWords(uint256 _requestId, uint256[] memory _randomWords) internal override {
-    uint256 _gameId = _completeRound(_requestId, _randomWords[0]);
-    _completeGame(_gameId);
+    _completeRound(_requestId, _randomWords[0]);
   }
-
-  function _completeGame(uint256 _gameId) private {}
 
   function _completeRound(uint256 _requestId, uint256 _randomWord) private returns (uint256 _gameId) {
     _gameId = s_requests[_requestId];
-    Game storage _game = games[_gameId];
+    Game storage _game = _games[_gameId];
 
     require(_gameId != 0, 'request not found');
     require(_game.gameStatus == GameStatus.PendingOracle, 'Round is not pending oracle');
 
     uint256 _diceRoll = (_randomWord % 6) + 1;
-    uint256 currentPosition;
-    bool facingRight;
+    PlayerState storage currentPlayer;
+    PlayerState storage otherPlayer;
+
     if (_game.player1Turn) {
-      currentPosition = _game.player1State.position;
-      facingRight = _game.player1State.facingRight;
+      currentPlayer = _game.player1State;
+      otherPlayer = _game.player2State;
     } else {
-      currentPosition = _game.player2State.position;
-      facingRight = _game.player2State.facingRight;
+      currentPlayer = _game.player2State;
+      otherPlayer = _game.player1State;
     }
+
+    uint256 currentPosition = currentPlayer.position;
+    bool facingRight = currentPlayer.facingRight;
 
     (uint256 newPosition, bool newFacingRight) = _movePlayer(currentPosition, _diceRoll, facingRight);
 
-    if (_game.player1Turn) {
-      uint256 otherPosition = _game.player2State.position;
-    } else {
-      _game.player2State.position = newPosition;
-      _game.player2State.facingRight = newFacingRight;
+    // Check if monkeys are facing each other and within range
+    if ((facingRight && newPosition < otherPlayer.position) || (!facingRight && newPosition > otherPlayer.position)) {
+      uint256 distance =
+        newPosition > otherPlayer.position ? newPosition - otherPlayer.position : otherPlayer.position - newPosition;
+      if (distance <= currentPlayer.weapon.range) {
+        // Apply damage if not on the same position
+        if (newPosition != otherPlayer.position) {
+          bool isDead = _wound(otherPlayer, currentPlayer.weapon.damage);
+
+          // Check if the other player is dead
+          if (isDead) {
+            completeGame(_gameId, currentPlayer.player);
+            return _gameId;
+          }
+        }
+      }
     }
 
-    games[_gameId].gameStatus = GameStatus.PendingPlayer;
+    currentPlayer.position = newPosition;
+    currentPlayer.facingRight = newFacingRight;
 
-    games[_gameId].player1Turn = !games[_gameId].player1Turn;
+    _game.gameStatus = GameStatus.PendingPlayer;
+    _game.player1Turn = !_game.player1Turn;
 
     return _gameId;
+  }
+
+  function _wound(PlayerState storage player, uint256 damage) private returns (bool) {
+    player.healthRemaining = player.healthRemaining > damage ? player.healthRemaining - damage : 0;
+    return player.healthRemaining == 0;
+  }
+
+  function completeGame(uint256 _gameId, address winner) private {
+    Game storage _game = _games[_gameId];
+    _game.gameStatus = GameStatus.Completed;
+    _game.winner = winner;
   }
 
   function _vrfRequest() private returns (uint256 _requestId) {
