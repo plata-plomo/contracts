@@ -2,12 +2,12 @@
 // solhint-disable custom-errors
 pragma solidity 0.8.23;
 
-import {ConfirmedOwner} from '@chainlink/contracts/src/v0.8/shared/access/ConfirmedOwner.sol';
-import {VRFConsumerBaseV2} from '@chainlink/contracts/src/v0.8/vrf/VRFConsumerBaseV2.sol';
-import {VRFCoordinatorV2Interface} from '@chainlink/contracts/src/v0.8/vrf/interfaces/VRFCoordinatorV2Interface.sol';
+import {VRFConsumerBaseV2Plus} from '@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol';
+import {VRFV2PlusClient} from '@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol';
+
 import {IERC20} from 'forge-std/interfaces/IERC20.sol';
 
-contract PlataPlomo is VRFConsumerBaseV2, ConfirmedOwner {
+contract PlataPlomo is VRFConsumerBaseV2Plus {
   struct Player {
     address player;
     string name;
@@ -25,9 +25,6 @@ contract PlataPlomo is VRFConsumerBaseV2, ConfirmedOwner {
     Completed
   }
 
-  // solhint-disable-next-line
-  VRFCoordinatorV2Interface COORDINATOR;
-  address public vrfCoordinator = 0x5CE8D5A2BC84beb22a398CCA51996F7930313D61;
   bytes32 public keyHash = 0x1770bdc7eec7771f7ba4ffd640f34260d7f095b79c92d34a5b2551d6f6cfd2be;
   uint32 public callbackGasLimit = 2_500_000;
   uint16 public requestConfirmations = 3;
@@ -51,8 +48,10 @@ contract PlataPlomo is VRFConsumerBaseV2, ConfirmedOwner {
 
   GameState public gameState;
 
-  constructor(uint64 _subscriptionId) VRFConsumerBaseV2(vrfCoordinator) ConfirmedOwner(msg.sender) {
-    COORDINATOR = VRFCoordinatorV2Interface(vrfCoordinator);
+  event RequestSent(uint256 requestId, uint32 numWords);
+  event RequestFulfilled(uint256 requestId, uint256[] randomWords);
+
+  constructor(uint64 _subscriptionId) VRFConsumerBaseV2Plus(0x5CE8D5A2BC84beb22a398CCA51996F7930313D61) {
     s_subscriptionId = _subscriptionId;
     gameState = GameState.Completed;
     _plataOwner = msg.sender;
@@ -113,13 +112,14 @@ contract PlataPlomo is VRFConsumerBaseV2, ConfirmedOwner {
   }
 
   // solhint-disable-next-line
-  function fulfillRandomWords(uint256 _requestId, uint256[] memory _randomWords) internal override {
+  function fulfillRandomWords(uint256 _requestId, uint256[] calldata _randomWords) internal override {
     require(gameState == GameState.PendingOracle, 'not pending oracle?');
     require(lastRequestId == _requestId, 'wrong request id');
+    emit RequestFulfilled(_requestId, _randomWords);
     _completeRound(_randomWords);
   }
 
-  function _completeRound(uint256[] memory _randomWords) private {
+  function _completeRound(uint256[] calldata _randomWords) private {
     playerOne.lastDice == _randomWords[0] % 6 + 1;
     playerTwo.lastDice == _randomWords[1] % 6 + 1;
 
@@ -206,8 +206,17 @@ contract PlataPlomo is VRFConsumerBaseV2, ConfirmedOwner {
 
   function _vrfRequest() private returns (uint256 _requestId) {
     // Randomisation request
-    _requestId =
-      COORDINATOR.requestRandomWords(keyHash, s_subscriptionId, requestConfirmations, callbackGasLimit, numWords);
+    _requestId = s_vrfCoordinator.requestRandomWords(
+      VRFV2PlusClient.RandomWordsRequest({
+        keyHash: keyHash,
+        subId: s_subscriptionId,
+        requestConfirmations: requestConfirmations,
+        callbackGasLimit: callbackGasLimit,
+        numWords: numWords,
+        extraArgs: VRFV2PlusClient._argsToBytes(VRFV2PlusClient.ExtraArgsV1({nativePayment: false}))
+      })
+    );
+    emit RequestSent(_requestId, numWords);
     return _requestId;
   }
 
