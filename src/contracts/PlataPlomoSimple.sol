@@ -5,7 +5,7 @@ pragma solidity 0.8.23;
 import {VRFConsumerBaseV2Plus} from '@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol';
 import {VRFV2PlusClient} from '@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol';
 
-import {IERC20} from 'forge-std/interfaces/IERC20.sol';
+import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 
 contract PlataPlomo is VRFConsumerBaseV2Plus {
   struct Player {
@@ -32,7 +32,7 @@ contract PlataPlomo is VRFConsumerBaseV2Plus {
   uint256 public maxBranches = 5;
 
   // solhint-disable-next-line
-  uint64 public s_subscriptionId;
+  uint256 public s_subscriptionId;
   IERC20 public apeToken = IERC20(address(0));
 
   Player public playerOne;
@@ -51,7 +51,7 @@ contract PlataPlomo is VRFConsumerBaseV2Plus {
   event RequestSent(uint256 requestId, uint32 numWords);
   event RequestFulfilled(uint256 requestId, uint256[] randomWords);
 
-  constructor(uint64 _subscriptionId) VRFConsumerBaseV2Plus(0x5CE8D5A2BC84beb22a398CCA51996F7930313D61) {
+  constructor(uint256 _subscriptionId) VRFConsumerBaseV2Plus(0x5CE8D5A2BC84beb22a398CCA51996F7930313D61) {
     s_subscriptionId = _subscriptionId;
     gameState = GameState.Completed;
     _plataOwner = msg.sender;
