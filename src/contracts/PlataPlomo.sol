@@ -37,7 +37,7 @@ contract PlataPlomo is VRFConsumerBaseV2, ConfirmedOwner {
     uint256 healthRemaining;
     Weapon weapon;
     bool facingRight;
-    uint8 position;
+    uint256 position;
   }
 
   struct Game {
@@ -48,7 +48,7 @@ contract PlataPlomo is VRFConsumerBaseV2, ConfirmedOwner {
     uint256 lastRequestId;
     PlayerState player1State;
     PlayerState player2State;
-    uint8 maxBranches;
+    uint256 maxBranches;
   }
 
   struct RequestStatus {
@@ -64,7 +64,7 @@ contract PlataPlomo is VRFConsumerBaseV2, ConfirmedOwner {
   uint32 public callbackGasLimit = 2_500_000;
   uint16 public requestConfirmations = 3;
   uint32 public numWords = 1;
-  uint8 public maxBranches = 5;
+  uint256 public maxBranches = 5;
 
   // solhint-disable-next-line
   uint64 public s_subscriptionId;
@@ -111,7 +111,7 @@ contract PlataPlomo is VRFConsumerBaseV2, ConfirmedOwner {
     games[_gameId].gameStatus = GameStatus.PendingPlayer;
   }
 
-  function gameStatus(uint256 _gameId, bool _moveRight) external {
+  function startRound(uint256 _gameId, bool _moveRight) external {
     if (games[_gameId].gameStatus != GameStatus.PendingPlayer) {
       revert('Next round is not playable');
     }
@@ -127,7 +127,6 @@ contract PlataPlomo is VRFConsumerBaseV2, ConfirmedOwner {
       revert('Not your turn');
     }
 
-    games[_gameId].player1Turn = !games[_gameId].player1Turn;
     games[_gameId].gameStatus = GameStatus.PendingOracle;
     uint256 _requestId = _vrfRequest();
 
@@ -138,17 +137,77 @@ contract PlataPlomo is VRFConsumerBaseV2, ConfirmedOwner {
 
   // solhint-disable-next-line
   function fulfillRandomWords(uint256 _requestId, uint256[] memory _randomWords) internal override {
-    _completeTurn(_requestId, _randomWords[0]);
+    uint256 _gameId = _completeRound(_requestId, _randomWords[0]);
+    _completeGame(_gameId);
   }
 
-  function _completeTurn(uint256 _requestId, uint256 _randomWord) private {
-    uint256 _gameId = s_requests[_requestId];
+  function _completeGame(uint256 _gameId) private {}
+
+  function _movePlayer(
+    uint256 _currentPosition,
+    uint256 _diceRoll,
+    bool _facingRight
+  ) private returns (uint256 newPosition, bool _newFacingRight) {
+    newPosition = _currentPosition;
+    _newFacingRight = _facingRight;
+
+    if (_facingRight) {
+      unchecked {
+        // Using unchecked as the logic ensures we won't exceed maxBranches
+        if (_currentPosition + _diceRoll < maxBranches) {
+          newPosition = _currentPosition + _diceRoll;
+        } else {
+          newPosition = maxBranches - (_diceRoll - (maxBranches - _currentPosition));
+          _newFacingRight = false; // Turn around
+        }
+      }
+    } else {
+      unchecked {
+        // Using unchecked as the logic ensures we won't go below 0
+        if (_currentPosition >= _diceRoll) {
+          newPosition = _currentPosition - _diceRoll;
+        } else {
+          newPosition = _diceRoll - _currentPosition;
+          _newFacingRight = true; // Turn around
+        }
+      }
+    }
+
+    return (newPosition, _newFacingRight);
+  }
+
+  function _completeRound(uint256 _requestId, uint256 _randomWord) private returns (uint256 _gameId) {
+    _gameId = s_requests[_requestId];
+    Game storage _game = games[_gameId];
+
     require(_gameId != 0, 'request not found');
-    require(games[_gameId].gameStatus == GameStatus.PendingOracle, 'Round is not pending oracle');
+    require(_game.gameStatus == GameStatus.PendingOracle, 'Round is not pending oracle');
+
+    uint256 _diceRoll = (_randomWord % 6) + 1;
+    uint256 currentPosition;
+    bool facingRight;
+    if (_game.player1Turn) {
+      currentPosition = _game.player1State.position;
+      facingRight = _game.player1State.facingRight;
+    } else {
+      currentPosition = _game.player2State.position;
+      facingRight = _game.player2State.facingRight;
+    }
+
+    (uint256 newPosition, bool newFacingRight) = _movePlayer(currentPosition, _diceRoll, facingRight);
+
+    if (_game.player1Turn) {
+      uint256 otherPosition = _game.player2State.position;
+    } else {
+      _game.player2State.position = newPosition;
+      _game.player2State.facingRight = newFacingRight;
+    }
 
     games[_gameId].gameStatus = GameStatus.PendingPlayer;
 
-    emit RoundCompleted(games[_gameId].round, _gameId, msg.sender, _requestId, _randomWord);
+    games[_gameId].player1Turn = !games[_gameId].player1Turn;
+
+    return _gameId;
   }
 
   function _vrfRequest() private returns (uint256 _requestId) {
