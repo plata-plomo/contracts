@@ -143,39 +143,6 @@ contract PlataPlomo is VRFConsumerBaseV2, ConfirmedOwner {
 
   function _completeGame(uint256 _gameId) private {}
 
-  function _movePlayer(
-    uint256 _currentPosition,
-    uint256 _diceRoll,
-    bool _facingRight
-  ) private returns (uint256 newPosition, bool _newFacingRight) {
-    newPosition = _currentPosition;
-    _newFacingRight = _facingRight;
-
-    if (_facingRight) {
-      unchecked {
-        // Using unchecked as the logic ensures we won't exceed maxBranches
-        if (_currentPosition + _diceRoll < maxBranches) {
-          newPosition = _currentPosition + _diceRoll;
-        } else {
-          newPosition = maxBranches - (_diceRoll - (maxBranches - _currentPosition));
-          _newFacingRight = false; // Turn around
-        }
-      }
-    } else {
-      unchecked {
-        // Using unchecked as the logic ensures we won't go below 0
-        if (_currentPosition >= _diceRoll) {
-          newPosition = _currentPosition - _diceRoll;
-        } else {
-          newPosition = _diceRoll - _currentPosition;
-          _newFacingRight = true; // Turn around
-        }
-      }
-    }
-
-    return (newPosition, _newFacingRight);
-  }
-
   function _completeRound(uint256 _requestId, uint256 _randomWord) private returns (uint256 _gameId) {
     _gameId = s_requests[_requestId];
     Game storage _game = games[_gameId];
@@ -215,5 +182,38 @@ contract PlataPlomo is VRFConsumerBaseV2, ConfirmedOwner {
     _requestId =
       COORDINATOR.requestRandomWords(keyHash, s_subscriptionId, requestConfirmations, callbackGasLimit, numWords);
     return _requestId;
+  }
+
+  function _movePlayer(
+    uint256 _currentPosition,
+    uint256 _diceRoll,
+    bool _facingRight
+  ) private view returns (uint256 newPosition, bool _newFacingRight) {
+    newPosition = _currentPosition;
+    _newFacingRight = _facingRight;
+
+    if (_facingRight) {
+      unchecked {
+        // Using unchecked as the logic ensures we won't exceed maxBranches
+        if (_currentPosition + _diceRoll < maxBranches) {
+          newPosition = _currentPosition + _diceRoll;
+        } else {
+          newPosition = maxBranches - (_diceRoll - (maxBranches - _currentPosition));
+          _newFacingRight = false; // Turn around
+        }
+      }
+    } else {
+      unchecked {
+        // Using unchecked as the logic ensures we won't go below 0
+        if (_currentPosition >= _diceRoll) {
+          newPosition = _currentPosition - _diceRoll;
+        } else {
+          newPosition = _diceRoll - _currentPosition;
+          _newFacingRight = true; // Turn around
+        }
+      }
+    }
+
+    return (newPosition, _newFacingRight);
   }
 }
