@@ -74,7 +74,7 @@ InternalServerError(): Thrown when an unexpected state is encountered.
 event GameCreated(address player, string name);
 
 // Emitted when a player rolls the dice.
-event DiceRolled(address player, uint256 diceValue, bool facingRight);
+event DiceRolled(address player, bool facingRight);
 
 // Emitted when a player moves to a new position.
 event PlayerMoved(address player, uint256 newPosition, bool facingRight);

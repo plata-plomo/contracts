@@ -51,7 +51,7 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
   event RequestSent(uint256 requestId, uint32 numWords);
   event RequestFulfilled(uint256 requestId, uint256[] randomWords);
   event GameCreated(address player, string name);
-  event DiceRolled(address player, uint256 diceValue, bool facingRight);
+  event DiceRolled(address player, bool facingRight);
   event PlayerMoved(address player, uint256 newPosition, bool facingRight);
   event BananaShot(address shooter, address target, uint256 newHealth, bool targetDead);
   event GameCompleted(address winner);
@@ -96,15 +96,13 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
       revert PlayerNotInGame();
     }
 
-    uint256 diceValue = uint256(keccak256(abi.encodePacked(block.timestamp, msg.sender))) % 6 + 1;
     // Check if it's player one's turn but not in the PendingPlayerOne state
     if (playerOne.player == msg.sender && gameState == GameState.PendingPlayerOne) {
       stateStored++;
       if (stateStored == 1) {
         playerOne.facingRight = _facingRight;
-        playerOne.lastDice = diceValue;
         gameState = GameState.PendingPlayerTwo;
-        emit DiceRolled(msg.sender, diceValue, _facingRight);
+        emit DiceRolled(msg.sender, _facingRight);
       } else if (stateStored == 2) {
         gameState = GameState.PendingOracle;
         lastRequestId = _vrfRequest();
@@ -118,9 +116,8 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
       stateStored++;
       if (stateStored == 1) {
         playerTwo.facingRight = _facingRight;
-        playerTwo.lastDice = diceValue;
         gameState = GameState.PendingPlayerOne;
-        emit DiceRolled(msg.sender, diceValue, _facingRight);
+        emit DiceRolled(msg.sender, _facingRight);
       } else if (stateStored == 2) {
         gameState = GameState.PendingOracle;
         lastRequestId = _vrfRequest();
