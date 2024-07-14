@@ -1,4 +1,4 @@
-  // SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 // solhint-disable custom-errors
 pragma solidity 0.8.23;
 
@@ -50,6 +50,11 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
 
   event RequestSent(uint256 requestId, uint32 numWords);
   event RequestFulfilled(uint256 requestId, uint256[] randomWords);
+  event GameCreated(address player, string name);
+  event DiceRolled(address player, uint256 diceValue, bool facingRight);
+  event PlayerMoved(address player, uint256 newPosition, bool facingRight);
+  event BananaShot(address shooter, address target, uint256 newHealth, bool targetDead);
+  event GameCompleted(address winner);
 
   constructor(
     uint256 _subscriptionId,
@@ -72,6 +77,7 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
       playerTwo = Player(msg.sender, _name, initialHealth, false, maxBranches - 1, 0);
       gameState = GameState.PendingPlayerOne;
     }
+    emit GameCreated(msg.sender, _name);
   }
 
   function rollDice(bool _facingRight) external {
@@ -85,12 +91,15 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
       revert('Player is not in the game');
     }
 
+    uint256 diceValue = uint256(keccak256(abi.encodePacked(block.timestamp, msg.sender))) % 6 + 1;
     // Check if it's player one's turn but not in the PendingPlayerOne state
     if (playerOne.player == msg.sender && gameState == GameState.PendingPlayerOne) {
       stateStored++;
       if (stateStored == 1) {
         playerOne.facingRight = _facingRight;
+        playerOne.lastDice = diceValue;
         gameState = GameState.PendingPlayerTwo;
+        emit DiceRolled(msg.sender, diceValue, _facingRight);
       } else if (stateStored == 2) {
         gameState = GameState.PendingOracle;
         lastRequestId = _vrfRequest();
@@ -104,7 +113,9 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
       stateStored++;
       if (stateStored == 1) {
         playerTwo.facingRight = _facingRight;
+        playerTwo.lastDice = diceValue;
         gameState = GameState.PendingPlayerOne;
+        emit DiceRolled(msg.sender, diceValue, _facingRight);
       } else if (stateStored == 2) {
         gameState = GameState.PendingOracle;
         lastRequestId = _vrfRequest();
@@ -160,6 +171,7 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
     ) {
       if (firstPlayerPosition != secondPlayerPosition) {
         bool isDead = _wound(_secondPlayer, bananaDamage);
+        emit BananaShot(_firstPlayer.player, _secondPlayer.player, _secondPlayer.health, isDead);
 
         // Check if the other player is dead
         if (isDead) {
@@ -177,6 +189,7 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
   function completeGame(address _winner) private {
     gameState = GameState.Completed;
     apeToken.transfer(_winner, apeToken.balanceOf(address(this)));
+    emit GameCompleted(_winner);
   }
 
   function _movePlayer(Player storage _player) private {
@@ -204,6 +217,7 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
 
     _player.facingRight = _newFacingRight;
     _player.position = _currentPosition;
+    emit PlayerMoved(_player.player, _currentPosition, _newFacingRight);
   }
 
   function _vrfRequest() private returns (uint256 _requestId) {
