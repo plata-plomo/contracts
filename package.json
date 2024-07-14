@@ -34,6 +34,11 @@
     "test/**/*.sol": "yarn lint:sol-tests",
     "package.json": "sort-package-json"
   },
+  "dependencies": {
+    "@chainlink/contracts": "^1.1.1",
+    "@openzeppelin/contracts": "^5.0.2",
+    "@poanet/solidity-flattener": "^3.0.9"
+  },
   "devDependencies": {
     "@commitlint/cli": "19.3.0",
     "@commitlint/config-conventional": "19.2.2",
