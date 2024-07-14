@@ -1,7 +1,7 @@
 // // SPDX-License-Identifier: MIT
 // pragma solidity 0.8.23;
 
-// import {Greeter} from 'contracts/Greeter.sol';
+// import {PlataPlomoSimple} from 'contracts/PlataPlomoSimple.sol';
 // import {Script} from 'forge-std/Script.sol';
 // import {IERC20} from 'forge-std/interfaces/IERC20.sol';
 

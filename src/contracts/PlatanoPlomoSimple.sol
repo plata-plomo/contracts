@@ -2,12 +2,12 @@
 // solhint-disable custom-errors
 pragma solidity 0.8.23;
 
-import {VRFConsumerBaseV2Plus} from '@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol';
-import {VRFV2PlusClient} from '@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol';
+import {VRFConsumerBaseV2Plus} from '../../node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol';
+import {VRFV2PlusClient} from '../../node_modules/@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol';
 
-import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import {IERC20} from '../../node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol';
 
-contract PlataPlomo is VRFConsumerBaseV2Plus {
+contract PlatanoPlomo is VRFConsumerBaseV2Plus {
   struct Player {
     address player;
     string name;
@@ -33,7 +33,7 @@ contract PlataPlomo is VRFConsumerBaseV2Plus {
 
   // solhint-disable-next-line
   uint256 public s_subscriptionId;
-  IERC20 public apeToken = IERC20(address(0));
+  IERC20 public apeToken;
 
   Player public playerOne;
   Player public playerTwo;
@@ -51,10 +51,14 @@ contract PlataPlomo is VRFConsumerBaseV2Plus {
   event RequestSent(uint256 requestId, uint32 numWords);
   event RequestFulfilled(uint256 requestId, uint256[] randomWords);
 
-  constructor(uint256 _subscriptionId) VRFConsumerBaseV2Plus(0x5CE8D5A2BC84beb22a398CCA51996F7930313D61) {
+  constructor(
+    uint256 _subscriptionId,
+    address _apeTokenAddress
+  ) VRFConsumerBaseV2Plus(0x5CE8D5A2BC84beb22a398CCA51996F7930313D61) {
     s_subscriptionId = _subscriptionId;
     gameState = GameState.Completed;
     _plataOwner = msg.sender;
+    apeToken = IERC20(_apeTokenAddress);
   }
 
   function createGame(string memory _name) external {
@@ -71,43 +75,45 @@ contract PlataPlomo is VRFConsumerBaseV2Plus {
   }
 
   function rollDice(bool _facingRight) external {
-    if (gameState != GameState.PendingPlayerOne || gameState != GameState.PendingPlayerTwo) {
+    // Check if the game state is either PendingPlayerOne or PendingPlayerTwo
+    if (gameState != GameState.PendingPlayerOne && gameState != GameState.PendingPlayerTwo) {
       revert('Next round is not playable');
     }
 
+    // Check if the caller is either player one or player two
     if (playerOne.player != msg.sender && playerTwo.player != msg.sender) {
       revert('Player is not in the game');
     }
 
-    if (
-      playerOne.player == msg.sender && gameState != GameState.PendingPlayerOne
-        || playerTwo.player == msg.sender && gameState != GameState.PendingPlayerTwo
-    ) {
-      revert('Not your turn');
-    }
-
-    if (gameState == GameState.PendingPlayerOne && playerOne.player == msg.sender) {
-      if (++stateStored == 1) {
+    // Check if it's player one's turn but not in the PendingPlayerOne state
+    if (playerOne.player == msg.sender && gameState == GameState.PendingPlayerOne) {
+      stateStored++;
+      if (stateStored == 1) {
         playerOne.facingRight = _facingRight;
         gameState = GameState.PendingPlayerTwo;
-      } else if (++stateStored == 2) {
+      } else if (stateStored == 2) {
         gameState = GameState.PendingOracle;
         lastRequestId = _vrfRequest();
         stateStored = 0;
       } else {
         require(false, 'Internal Server Error');
       }
-    } else if (gameState == GameState.PendingPlayerTwo && playerTwo.player == msg.sender) {
-      if (++stateStored == 1) {
+    }
+    // Check if it's player two's turn but not in the PendingPlayerTwo state
+    else if (playerTwo.player == msg.sender && gameState == GameState.PendingPlayerTwo) {
+      stateStored++;
+      if (stateStored == 1) {
         playerTwo.facingRight = _facingRight;
         gameState = GameState.PendingPlayerOne;
-      } else if (++stateStored == 2) {
+      } else if (stateStored == 2) {
         gameState = GameState.PendingOracle;
         lastRequestId = _vrfRequest();
         stateStored = 0;
       } else {
         require(false, 'Internal Server Error');
       }
+    } else {
+      revert('Not your turn');
     }
   }
 
@@ -120,11 +126,12 @@ contract PlataPlomo is VRFConsumerBaseV2Plus {
   }
 
   function _completeRound(uint256[] calldata _randomWords) private {
-    playerOne.lastDice == _randomWords[0] % 6 + 1;
-    playerTwo.lastDice == _randomWords[1] % 6 + 1;
+    playerOne.lastDice = _randomWords[0] % 6 + 1;
+    playerTwo.lastDice = _randomWords[1] % 6 + 1;
 
     _movePlayer(playerOne);
     _movePlayer(playerTwo);
+
     if (roundNumber % 2 == 0) {
       _shootBananas(playerOne, playerTwo);
       _shootBananas(playerTwo, playerOne);
@@ -174,34 +181,29 @@ contract PlataPlomo is VRFConsumerBaseV2Plus {
 
   function _movePlayer(Player storage _player) private {
     uint256 _currentPosition = _player.position;
-    uint256 _newPosition = _player.position;
-    bool _newFacingRight = _player.facingRight;
     uint256 _diceRoll = _player.lastDice;
+    bool _newFacingRight = _player.facingRight;
 
     if (_newFacingRight) {
-      unchecked {
-        // Using unchecked as the logic ensures we won't exceed maxBranches
-        if (_currentPosition + _diceRoll < maxBranches) {
-          _newPosition = _currentPosition + _diceRoll;
-        } else {
-          _newPosition = maxBranches - (_diceRoll - (maxBranches - _currentPosition));
-          _newFacingRight = false; // Turn around
-        }
+      if (_currentPosition + _diceRoll < maxBranches) {
+        _currentPosition += _diceRoll;
+      } else {
+        uint256 overflow = _currentPosition + _diceRoll - maxBranches;
+        _currentPosition = maxBranches - overflow;
+        _newFacingRight = false; // Turn around
       }
     } else {
-      unchecked {
-        // Using unchecked as the logic ensures we won't go below 0
-        if (_currentPosition >= _diceRoll) {
-          _newPosition = _currentPosition - _diceRoll;
-        } else {
-          _newPosition = _diceRoll - _currentPosition;
-          _newFacingRight = true; // Turn around
-        }
+      if (_currentPosition >= _diceRoll) {
+        _currentPosition -= _diceRoll;
+      } else {
+        uint256 overflow = _diceRoll - _currentPosition;
+        _currentPosition = overflow;
+        _newFacingRight = true; // Turn around
       }
     }
 
     _player.facingRight = _newFacingRight;
-    _player.position = _newPosition;
+    _player.position = _currentPosition;
   }
 
   function _vrfRequest() private returns (uint256 _requestId) {
