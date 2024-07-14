@@ -1,4 +1,4 @@
-  // SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 // solhint-disable custom-errors
 pragma solidity 0.8.23;
 
@@ -50,6 +50,16 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
 
   event RequestSent(uint256 requestId, uint32 numWords);
   event RequestFulfilled(uint256 requestId, uint256[] randomWords);
+  event GameCreated(address player, string name);
+  event DiceRolled(address player, bool facingRight);
+  event PlayerMoved(address player, uint256 newPosition, bool facingRight);
+  event BananaShot(address shooter, address target, uint256 newHealth, bool targetDead);
+  event GameCompleted(address winner);
+
+  error NextRoundNotPlayable();
+  error PlayerNotInGame();
+  error NotYourTurn();
+  error InternalServerError();
 
   constructor(
     uint256 _subscriptionId,
@@ -72,17 +82,18 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
       playerTwo = Player(msg.sender, _name, initialHealth, false, maxBranches - 1, 0);
       gameState = GameState.PendingPlayerOne;
     }
+    emit GameCreated(msg.sender, _name);
   }
 
   function rollDice(bool _facingRight) external {
     // Check if the game state is either PendingPlayerOne or PendingPlayerTwo
     if (gameState != GameState.PendingPlayerOne && gameState != GameState.PendingPlayerTwo) {
-      revert('Next round is not playable');
+      revert NextRoundNotPlayable();
     }
 
     // Check if the caller is either player one or player two
     if (playerOne.player != msg.sender && playerTwo.player != msg.sender) {
-      revert('Player is not in the game');
+      revert PlayerNotInGame();
     }
 
     // Check if it's player one's turn but not in the PendingPlayerOne state
@@ -91,12 +102,13 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
       if (stateStored == 1) {
         playerOne.facingRight = _facingRight;
         gameState = GameState.PendingPlayerTwo;
+        emit DiceRolled(msg.sender, _facingRight);
       } else if (stateStored == 2) {
         gameState = GameState.PendingOracle;
         lastRequestId = _vrfRequest();
         stateStored = 0;
       } else {
-        require(false, 'Internal Server Error');
+        revert InternalServerError();
       }
     }
     // Check if it's player two's turn but not in the PendingPlayerTwo state
@@ -105,15 +117,16 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
       if (stateStored == 1) {
         playerTwo.facingRight = _facingRight;
         gameState = GameState.PendingPlayerOne;
+        emit DiceRolled(msg.sender, _facingRight);
       } else if (stateStored == 2) {
         gameState = GameState.PendingOracle;
         lastRequestId = _vrfRequest();
         stateStored = 0;
       } else {
-        require(false, 'Internal Server Error');
+        revert InternalServerError();
       }
     } else {
-      revert('Not your turn');
+      revert NotYourTurn();
     }
   }
 
@@ -160,6 +173,7 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
     ) {
       if (firstPlayerPosition != secondPlayerPosition) {
         bool isDead = _wound(_secondPlayer, bananaDamage);
+        emit BananaShot(_firstPlayer.player, _secondPlayer.player, _secondPlayer.health, isDead);
 
         // Check if the other player is dead
         if (isDead) {
@@ -177,6 +191,7 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
   function completeGame(address _winner) private {
     gameState = GameState.Completed;
     apeToken.transfer(_winner, apeToken.balanceOf(address(this)));
+    emit GameCompleted(_winner);
   }
 
   function _movePlayer(Player storage _player) private {
@@ -204,6 +219,7 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
 
     _player.facingRight = _newFacingRight;
     _player.position = _currentPosition;
+    emit PlayerMoved(_player.player, _currentPosition, _newFacingRight);
   }
 
   function _vrfRequest() private returns (uint256 _requestId) {

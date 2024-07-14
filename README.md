@@ -1,10 +1,97 @@
-<img src="https://raw.githubusercontent.com/defi-wonderland/brand/v1.0.0/external/solidity-foundry-boilerplate-banner.png" alt="wonderland banner" align="center" />
-<br />
+Thanks to Wonderland for the cool Foundry Boilerplate :)
 
-<div align="center"><strong>Start your next Solidity project with Foundry in seconds</strong></div>
-<div align="center">A highly scalable foundation focused on DX and best practices</div>
+# PlatanoPlomo
 
-<br />
+PlatanoPlomo is a smart contract game where two players roll dice and shoot bananas at each other. The game uses Chainlink VRF (Verifiable Random Function) for random number generation.
+
+## How to Play
+
+1. **Join the Game**: Players join by calling `createGame` and paying an entrance fee.
+2. **Roll Dice**: Players take turns rolling dice using `rollDice`.
+3. **Move and Shoot**: Players move and shoot bananas at each other based on their dice rolls.
+4. **Win**: The game continues until one player's health reaches zero.
+
+## Contract Details
+
+### Player Structure
+
+- `player`: Player's address
+- `name`: Player's name
+- `health`: Player's health
+- `facingRight`: Direction the player is facing
+- `position`: Player's position
+- `lastDice`: Last dice roll value
+
+### Game States
+
+- `MakingGame`: Setting up the game
+- `PendingPlayerOne`: Waiting for player one to roll
+- `PendingPlayerTwo`: Waiting for player two to roll
+- `PendingOracle`: Waiting for random number from Chainlink VRF
+- `Completed`: Game is over
+
+## Functions
+
+### createGame
+
+Join the game by paying the entrance fee.
+
+```solidity
+function createGame(string memory _name) external
+```
+
+### rollDice
+Roll the dice and update your direction.
+
+```solidity
+function rollDice(bool _facingRight) external
+```
+
+### fulfillRandomWords
+Callback for Chainlink VRF to complete the round.
+
+```solidity
+function fulfillRandomWords(uint256 _requestId, uint256[] calldata _randomWords) internal override
+```
+
+### forceEndGame
+
+Forcefully end the game and transfer the prize to a specified address (owner only).
+
+```solidity
+function forceEndGame(address _to) public
+```
+
+## Custom Errors
+NextRoundNotPlayable(): Thrown when the game state is not suitable for starting the next round.
+PlayerNotInGame(): Thrown when a non-player tries to roll the dice.
+NotYourTurn(): Thrown when a player tries to roll the dice out of turn.
+InternalServerError(): Thrown when an unexpected state is encountered.
+
+### Events
+
+// Emitted when a player joins the game.
+event GameCreated(address player, string name);
+
+// Emitted when a player rolls the dice.
+event DiceRolled(address player, bool facingRight);
+
+// Emitted when a player moves to a new position.
+event PlayerMoved(address player, uint256 newPosition, bool facingRight);
+
+// Emitted when a player shoots a banana at another player.
+event BananaShot(address shooter, address target, uint256 newHealth, bool targetDead);
+
+// Emitted when the game is completed.
+event GameCompleted(address winner);
+
+## Deployment
+Deploy the contract with:
+
+solidity
+```solidity
+constructor(uint256 _subscriptionId, address _apeTokenAddress)
+```
 
 ## Features
 
@@ -62,36 +149,6 @@ In order to run both unit and integration tests, run:
 yarn test
 ```
 
-In order to just run unit tests, run:
-
-```bash
-yarn test:unit
-```
-
-In order to run unit tests and run way more fuzzing than usual (5x), run:
-
-```bash
-yarn test:unit:deep
-```
-
-In order to just run integration tests, run:
-
-```bash
-yarn test:integration
-```
-
-In order to just run the echidna fuzzing campaign (requires [Echidna](https://github.com/crytic/building-secure-contracts/blob/master/program-analysis/echidna/introduction/installation.md) installed), run:
-
-```bash
-yarn test:fuzz
-```
-
-In order to just run the symbolic execution tests (requires [Halmos](https://github.com/a16z/halmos/blob/main/README.md#installation) installed), run:
-
-```bash
-yarn test:symbolic
-```
-
 In order to check your current code coverage, run:
 
 ```bash
@@ -121,40 +178,6 @@ yarn deploy:mainnet
 The deployments are stored in ./broadcast
 
 See the [Foundry Book for available options](https://book.getfoundry.sh/reference/forge/forge-create.html).
-
-## Export And Publish
-
-Export TypeScript interfaces from Solidity contracts and interfaces providing compatibility with TypeChain. Publish the exported packages to NPM.
-
-To enable this feature, make sure you've set the `NPM_TOKEN` on your org's secrets. Then set the job's conditional to `true`:
-
-```yaml
-jobs:
-  export:
-    name: Generate Interfaces And Contracts
-    # Remove the following line if you wish to export your Solidity contracts and interfaces and publish them to NPM
-    if: true
-    ...
-```
-
-Also, remember to update the `package_name` param to your package name:
-
-```yaml
-- name: Export Solidity - ${{ matrix.export_type }}
-  uses: defi-wonderland/solidity-exporter-action@1dbf5371c260add4a354e7a8d3467e5d3b9580b8
-  with:
-    # Update package_name with your package name
-    package_name: "my-cool-project"
-    ...
-
-
-- name: Publish to NPM - ${{ matrix.export_type }}
-  # Update `my-cool-project` with your package name
-  run: cd export/my-cool-project-${{ matrix.export_type }} && npm publish --access public
-  ...
-```
-
-You can take a look at our [solidity-exporter-action](https://github.com/defi-wonderland/solidity-exporter-action) repository for more information and usage examples.
 
 ## Licensing
 The primary license for the boilerplate is MIT, see [`LICENSE`](https://github.com/defi-wonderland/solidity-foundry-boilerplate/blob/main/LICENSE)
