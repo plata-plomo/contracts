@@ -56,6 +56,11 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
   event BananaShot(address shooter, address target, uint256 newHealth, bool targetDead);
   event GameCompleted(address winner);
 
+  error NextRoundNotPlayable();
+  error PlayerNotInGame();
+  error NotYourTurn();
+  error InternalServerError();
+
   constructor(
     uint256 _subscriptionId,
     address _apeTokenAddress
@@ -83,12 +88,12 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
   function rollDice(bool _facingRight) external {
     // Check if the game state is either PendingPlayerOne or PendingPlayerTwo
     if (gameState != GameState.PendingPlayerOne && gameState != GameState.PendingPlayerTwo) {
-      revert('Next round is not playable');
+      revert NextRoundNotPlayable();
     }
 
     // Check if the caller is either player one or player two
     if (playerOne.player != msg.sender && playerTwo.player != msg.sender) {
-      revert('Player is not in the game');
+      revert PlayerNotInGame();
     }
 
     uint256 diceValue = uint256(keccak256(abi.encodePacked(block.timestamp, msg.sender))) % 6 + 1;
@@ -105,7 +110,7 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
         lastRequestId = _vrfRequest();
         stateStored = 0;
       } else {
-        require(false, 'Internal Server Error');
+        revert InternalServerError();
       }
     }
     // Check if it's player two's turn but not in the PendingPlayerTwo state
@@ -121,10 +126,10 @@ contract PlatanoPlomo is VRFConsumerBaseV2Plus {
         lastRequestId = _vrfRequest();
         stateStored = 0;
       } else {
-        require(false, 'Internal Server Error');
+        revert InternalServerError();
       }
     } else {
-      revert('Not your turn');
+      revert NotYourTurn();
     }
   }
 
